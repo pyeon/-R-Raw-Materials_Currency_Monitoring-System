@@ -1,0 +1,57 @@
+name: 원자재/통화 시장 모니터링
+
+on:
+  schedule:
+    - cron: '0 0,6,12,18 * * *'  # UTC 0시,6시,12시,18시 (KST 9시,15시,21시,3시)
+  workflow_dispatch:  # 수동 실행 허용
+
+permissions:
+  contents: write  # Git push 권한 필수
+
+jobs:
+  commodity-monitor:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 체크아웃
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Python 설정
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: 의존성 설치
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: 디렉토리 생성
+      run: |
+        mkdir -p market_data
+        mkdir -p analysis_reports
+    
+    - name: 원자재/통화 데이터 수집 및 분석
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TZ: Asia/Seoul
+      run: |
+        cd commodity_monitor
+        python main.py
+    
+    - name: Git 설정
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+    
+    - name: 변경사항 커밋 및 푸시
+      run: |
+        git add market_data/ analysis_reports/
+        git diff --staged --quiet || git commit -m "📊 원자재/통화 시장 데이터 업데이트 $(date +'%Y-%m-%d %H:%M:%S KST')"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
